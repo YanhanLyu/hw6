@@ -49,7 +49,7 @@ public class Assembler {
     /*
      Generate an array list of k-mers from the reads list
      */
-    private ArrayList<String> formKMers(List<String> readsList) {
+    private ArrayList<String> formKMers(ArrayList<String> readsList) {
         ArrayList<String> kMers = new ArrayList<String>();
         for (String read : readsList){
             int n = read.length();
@@ -63,21 +63,38 @@ public class Assembler {
         return kMers;
     }
 
+
+    /*
+     Generate an array list of k-mers from the reads list
+     */
+     private ArrayList<String> formKMinus1Mers(ArrayList<String> kMers) {
+        ArrayList<String> KMinus1Mers = new ArrayList<String>();
+        for (String kMer : kMers){
+            int n = kMer.length();
+            int i = 0;
+            // what about reads < k? right now we are ignoring them
+            KMinus1Mers.add(kMer.substring(0,n-1));
+            KMinus1Mers.add(kMer.substring(1,n));
+        }
+        return KMinus1Mers;
+    }
+
     /*
      Create the de Bruijn edges
      */
     private void assemble() {
         ArrayList<String> readsList = readsParser();
         ArrayList<String> kMers = formKMers(readsList);
+        ArrayList<String> kMinus1Mers = formKMinus1Mers(kMers);
         // the de Bruijn edges
         HashMap<Node, ArrayList<Node>> edges = new HashMap<Node, ArrayList<Node>>();
         // dictionary matching a (k-1)mer
         // to its respective node (vertex in the de Bruijn edges)
         HashMap<String, Node> vertices = new HashMap<String, Node>();
 
-        for (int i = 0; i < kMers.size()-1; i = i+2){
-            String kmerLeft = kMers.get(i);
-            String kmerRight = kMers.get(i+1);
+        for (int i = 0; i < kMinus1Mers.size()-1; i++){
+            String kmerLeft = kMinus1Mers.get(i);
+            String kmerRight = kMinus1Mers.get(i+1);
             Node nodeL;
             Node nodeR;
             if (vertices.containsKey(kmerLeft)){
