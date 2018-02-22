@@ -2,6 +2,12 @@ sample.fasta - An example Fasta file that can be used to simulate reads
 
 reads.txt - Output file for reads
 
+First, we need to go to src directory.
+command:
+cd src
+
+The following commands should be run inside src folder.
+
 simulate.sh will take in the following parameters (in this order):
 • FASTA sequence file (string) - File containing a DNA sequence.
 • Coverage (integer) - The coverage of the simulated sequencing experiment.
