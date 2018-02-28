@@ -21,11 +21,12 @@ public class Assembler {
     }
 
     /*
-     Parse the txt file of reads into an array list of strings of reads
+     Parse the txt file of reads into a dictionary
+     with keys being the strings of reads and values being whether the reads are unvisited
      */
-    public ArrayList<String> readsParser(){
+    public HashMap<String, Boolean> readsParser(){
         String fileName = this.readsFile;
-        ArrayList<String> readsList = new ArrayList<String>();
+        HashMap<String, Boolean> readsList = new HashMap<String, Boolean>();
         try {
             File file = new File(fileName);
             FileReader fileReader = new FileReader(file);
@@ -35,7 +36,7 @@ public class Assembler {
                 if (read.contains(">")){
                     continue;
                 }
-                readsList.add(read.toUpperCase());
+                readsList.put(read.toUpperCase(), true);
             }
             bufferedReader.close();
             fileReader.close();
@@ -49,8 +50,8 @@ public class Assembler {
     /*
      Generate an array list of k-mers from the reads list
      */
-    private HashMap<String, ArrayList<String>> formKMers(ArrayList<String> readsList) {
-        HashMap<String, ArrayList<String>> readskMers = new HashMap<String, ArrayList<String>>();
+    private HashMap<String, HashSet<String>> formKMers(Set<String> readsList) {
+        HashMap<String, HashSet<String>> readskMers = new HashMap<String, HashSet<String>>();
         for (String read : readsList){
             int n = read.length();
             int i = 0;
@@ -60,7 +61,7 @@ public class Assembler {
                 if (readskMers.containsKey(read)){
                     readskMers.get(read).add(read.substring(i,i+k));
                 } else {
-                    ArrayList<String> list = new ArrayList<>();
+                    HashSet<String> list = new HashSet<String>();
                     readskMers.put(read, list);
                     list.add(read.substring(i,i+k));
                 }
@@ -83,11 +84,11 @@ public class Assembler {
     /*
      Generate an array list of k-mers from the reads list
      */
-    private HashMap<String, ArrayList<String>> formKMinus1Mers(HashMap<String, ArrayList<String>> kMers) {
+    private HashMap<String, ArrayList<String>> formKMinus1Mers(HashMap<String, HashSet<String>> kMers) {
         HashMap<String, ArrayList<String>>  kMinus1Mers = new HashMap<String, ArrayList<String>>();
-        for (Map.Entry<String, ArrayList<String>> entry: kMers.entrySet()) {
+        for (Map.Entry<String, HashSet<String>> entry: kMers.entrySet()) {
             String read = entry.getKey();
-            ArrayList<String> kmers = entry.getValue();
+            HashSet<String> kmers = entry.getValue();
             for (String kmer : kmers) {
                 int n = kmer.length();
                 int i = 0;
@@ -119,8 +120,8 @@ public class Assembler {
      Create the de Bruijn edges
      */
     private void assemble() {
-        ArrayList<String> readsList = readsParser();
-        HashMap<String, ArrayList<String>> readsKmer = formKMers(readsList);
+        HashMap<String, Boolean> readsList = readsParser();
+        HashMap<String, HashSet<String>> readsKmer = formKMers(readsList.keySet());
         HashMap<String, ArrayList<String>> readskMinus1Mers = formKMinus1Mers(readsKmer);
         // the de Bruijn edges
         HashMap<Node, HashSet<Node>> edges = new HashMap<Node, HashSet<Node>>();
@@ -139,18 +140,10 @@ public class Assembler {
 
             for (int i = 0; i < kMinus1Mers.size(); i = i + 2) {
 
-//                headkminusmer = kMinus1Mers.get(0);
-//                endkminusmer = kMinus1Mers.get(kMinus1Mers.size()-1);
+
                 String kmerLeft = kMinus1Mers.get(i);
                 String kmerRight = kMinus1Mers.get(i + 1);
-//                System.out.println("??? "+read+"\n");
-//                System.out.println("left: "+kmerLeft+"\n");
-//                System.out.println("right: "+kmerRight+"\n");
-//                System.out.println("begin: "+headkminusmer+"\n");
-//                System.out.println("end: "+endkminusmer+"\n");
 
-                //System.out.println("l: "+kmerLeft);
-                //System.out.println("r: "+kmerRight);
                 Node nodeL;
                 Node nodeR;
                 if (vertices.containsKey(kmerLeft)) {
@@ -186,20 +179,11 @@ public class Assembler {
             }
         }
 
-        printEdges(edges);
+        // printEdges(edges);
         HashSet<Node> heads = getHead(vertices, edges);
 
         // Find Contigs
         for (Node head : heads) {
-            /*
-            attach read to the end of contig
-            for each read containing cur k-1:
-                find cutoff
-                substring of read
-                if (contig contains substring of read)
-                    curread = read
-                    break
-             */
 
             Node cur = head;
             String contig = "";
@@ -207,63 +191,50 @@ public class Assembler {
 
             // Attach first read
             for (String read : cur.reads) {
-                if (read.indexOf(cur.data) == 0) {
-                    curRead = read;
-                    contig += read;
-                    //System.out.println(contig);
-                    cur = vertices.get(read.substring(read.length() - k + 1));
+                // read is unvisited
+                if (readsList.get(read)){
+                    if (read.indexOf(cur.data) == 0) {
+                        curRead = read;
+                        contig += read;
+                        cur = vertices.get(read.substring(read.length() - k + 1));
+                        readsList.replace(read, false);
+                    }
                 }
+
             }
 
             boolean endOfContig = false;
-            boolean foundNext = false;
+            boolean foundNext;
 
             while (!endOfContig) {
                 foundNext = false;
                 for (String read : cur.reads) {
-                    if (!read.equals(curRead)){
-                        // cutoff  is the index of the first character that
-                        // comes immediately after the k-1 mer in read
-                        int cutoff = read.indexOf(cur.data) + k - 1;
-                        if (contig.contains(read.substring(0, cutoff))) {
-                            foundNext = true;
-                            curRead = read;
-                            contig += read.substring(cutoff);
-                            //System.out.println("read: "+read);
-                            cur = vertices.get(read.substring(read.length() - k + 1));
-                            //System.out.println(cur.data);
-                            break;
+                    if (readsList.get(read)){
+                        if (!read.equals(curRead)){
+                            // cutoff  is the index of the first character that
+                            // comes immediately after the k-1 mer in read
+                            int cutoff = read.indexOf(cur.data) + k - 1;
+                            if (contig.contains(read.substring(0, cutoff))) {
+                                foundNext = true;
+                                curRead = read;
+                                contig += read.substring(cutoff);
+                                cur = vertices.get(read.substring(read.length() - k + 1));
+                                readsList.replace(read, false);
+
+                                System.out.println("contig: " + contig);
+//                                System.out.println("read: "+read);
+                                System.out.println("cur"+cur.data);
+                                break;
+                            }
                         }
                     }
+
                 }
                 if (!foundNext){
                     endOfContig = true;
                 }
             }
-            System.out.println(contig);
-//            while (true){
-////                System.out.println(contig);
-////                System.out.println("prev: "+prev.data);
-//                System.out.println("cur: "+cur.data);
-//                if (edges.containsKey(cur)){
-//                    for (int i = 0; i < cur.reads.size(); i ++){
-//
-//                        // requires k-1 < reads length
-//                        if (cur.reads.get(i).indexOf(cur.data) == 0) {
-//                            String str = cur.reads.get(i);
-//                            contig += str;
-//                            System.out.println(str +"hi");
-//                            //prev = cur;
-//                            cur = vertices.get(str.substring(str.length()-k+1, str.length()));
-//                            break;
-//                        } else {
-//                            continue;
-//                        }
-//                    }
-//                } else {
-//                    break;
-//                }
-//            }
+            System.out.println("final contig: " + contig);
         }
     }
 
@@ -271,18 +242,21 @@ public class Assembler {
     private HashSet<Node> getHead(HashMap<String, Node> vertices, HashMap<Node, HashSet<Node>> edges){
         HashSet<Node> heads = new HashSet<Node>();
         for (Node vertex : vertices.values()) {
-            boolean temp = true;
+            boolean notPointedTo = true;
             for (HashSet<Node> listOfNode : edges.values()) {
                 if (listOfNode.contains(vertex)){
-                    temp = false;
+                    notPointedTo = false;
                     continue;
                 }
-
             }
 
-            if (edges.containsKey(vertex) && temp){
+            if (notPointedTo){
                 heads.add(vertex);
             }
+
+//            if (edges.containsKey(vertex) && notPointedTo){
+//                heads.add(vertex);
+//            }
 
         }
         System.out.println(heads.size()+"heads");
