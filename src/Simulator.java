@@ -107,9 +107,9 @@ public class Simulator{
     /*
      Write the simulated strings of read into a txt file
      */
-    private void writeToFile(String reads){
+    private void writeToFile(String reads, String fileName){
         try {
-            PrintWriter writer = new PrintWriter("reads.txt", "UTF-8");
+            PrintWriter writer = new PrintWriter(fileName, "UTF-8");
             writer.print(reads);
             writer.close();
         }catch (IOException error) {
@@ -139,7 +139,8 @@ public class Simulator{
             reads += finalRead + "\n";
             count ++;
         }
-        writeToFile(reads);
+        writeToFile(reads, "reads.txt");
+        writeToFile(dna, "dna.txt");
     }
 
     public static void main(String[] args) {

@@ -4,16 +4,18 @@
  * Currently, it prints out the de Bruijn edges.
  * Author: Yanhan Lyu, Weijia Ma */
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
+import java.io.*;
 import java.util.ArrayList;
 import java.util.*;
 
 public class Assembler {
     private String readsFile = "";
     private int k = 0;
+    // dictionary matching a (k-1)mer string
+    // to its respective node (vertex in the de Bruijn edges)
+    private HashMap<String, Node> vertices = new HashMap<String, Node>();
+    // dictionary matching a left (k-1)mer to a right (k-1)mer
+    private HashMap<Node, HashSet<Node>> edges = new HashMap<Node, HashSet<Node>>();
 
     public Assembler(String readsFile, int k){
         this.readsFile = readsFile;
@@ -70,13 +72,6 @@ public class Assembler {
             }
         }
 
-//        for (Map.Entry<String, ArrayList<String>> entry: readskMers.entrySet()) {
-//            String read = entry.getKey();
-//            ArrayList<String> kmers = entry.getValue();
-//            for (int i = 0; i < kmers.size(); i ++){
-//                System.out.println(read+" "+kmers.get(i));
-//            }
-//        }
         return readskMers;
     }
 
@@ -105,47 +100,27 @@ public class Assembler {
             }
 
         }
-
-//        for (Map.Entry<String, ArrayList<String>> entry: kMinus1Mers.entrySet()) {
-//            String read = entry.getKey();
-//            ArrayList<String> kmers = entry.getValue();
-//            for (int i = 0; i < kmers.size(); i ++){
-//                System.out.println(read+" "+kmers.get(i));
-//            }
-//        }
         return kMinus1Mers;
     }
 
     /*
-     Create the de Bruijn edges
+     Create de Bruijn graph
      */
-    private void assemble() {
-        HashMap<String, Boolean> readsList = readsParser();
-        HashMap<String, HashSet<String>> readsKmer = formKMers(readsList.keySet());
-        HashMap<String, ArrayList<String>> readskMinus1Mers = formKMinus1Mers(readsKmer);
-        // the de Bruijn edges
-        HashMap<Node, HashSet<Node>> edges = new HashMap<Node, HashSet<Node>>();
-        // dictionary matching a (k-1)mer string
-        // to its respective node (vertex in the de Bruijn edges)
-        HashMap<String, Node> vertices = new HashMap<String, Node>();
-
-
+    private void deBruijn(HashMap<String, ArrayList<String>> readskMinus1Mers) {
         for (Map.Entry<String, ArrayList<String>> entry : readskMinus1Mers.entrySet()) {
-
             String read = entry.getKey();
             ArrayList<String> kMinus1Mers = entry.getValue();
 //            int count = 0;
 //            String headkminusmer = "";
 //            String endkminusmer = "";
-
             for (int i = 0; i < kMinus1Mers.size(); i = i + 2) {
-
 
                 String kmerLeft = kMinus1Mers.get(i);
                 String kmerRight = kMinus1Mers.get(i + 1);
 
                 Node nodeL;
                 Node nodeR;
+                // Create left vertix
                 if (vertices.containsKey(kmerLeft)) {
                     nodeL = vertices.get(kmerLeft);
                     nodeL.addReads(read);
@@ -153,7 +128,7 @@ public class Assembler {
                     nodeL = new Node(kmerLeft,read);
                     vertices.put(kmerLeft, nodeL);
                 }
-
+                // Create left vertix
                 if (vertices.containsKey(kmerRight)) {
                     nodeR = vertices.get(kmerRight);
                     nodeR.addReads(read);
@@ -168,7 +143,7 @@ public class Assembler {
 //                nodeL.next.add(nodeR);
 //                nodeR.prev.add(nodeL);
 
-                // put into edge graph
+                // Create edge
                 if (edges.containsKey(nodeL)) {
                     edges.get(nodeL).add(nodeR);
                 } else {
@@ -178,67 +153,24 @@ public class Assembler {
                 }
             }
         }
-
-        // printEdges(edges);
-        HashSet<Node> heads = getHead(vertices, edges);
-
-        // Find Contigs
-        for (Node head : heads) {
-
-            Node cur = head;
-            String contig = "";
-            String curRead = "";
-
-            // Attach first read
-            for (String read : cur.reads) {
-                // read is unvisited
-                if (readsList.get(read)){
-                    if (read.indexOf(cur.data) == 0) {
-                        curRead = read;
-                        contig += read;
-                        cur = vertices.get(read.substring(read.length() - k + 1));
-                        readsList.replace(read, false);
-                    }
-                }
-
-            }
-
-            boolean endOfContig = false;
-            boolean foundNext;
-
-            while (!endOfContig) {
-                foundNext = false;
-                for (String read : cur.reads) {
-                    if (readsList.get(read)){
-                        if (!read.equals(curRead)){
-                            // cutoff  is the index of the first character that
-                            // comes immediately after the k-1 mer in read
-                            int cutoff = read.indexOf(cur.data) + k - 1;
-                            if (contig.contains(read.substring(0, cutoff))) {
-                                foundNext = true;
-                                curRead = read;
-                                contig += read.substring(cutoff);
-                                cur = vertices.get(read.substring(read.length() - k + 1));
-                                readsList.replace(read, false);
-
-                                System.out.println("contig: " + contig);
-//                                System.out.println("read: "+read);
-                                System.out.println("cur"+cur.data);
-                                break;
-                            }
-                        }
-                    }
-
-                }
-                if (!foundNext){
-                    endOfContig = true;
-                }
-            }
-            System.out.println("final contig: " + contig);
-        }
     }
 
+    /*
+     Help us visualize the edges of the de Bruijn edges
+    */
+    private void printEdges(HashMap<Node, HashSet<Node>> edges){
+        for(Node nodeL:edges.keySet()) {
+            for (Node node: edges.get(nodeL)){
+                System.out.print(nodeL.data+" -> ");
+                System.out.print(node.data+"\n");
+            }
+        }
+        System.out.print("\n");
+    }
 
+    /*
+     Find the start of a contig (head) in the graph
+     */
     private HashSet<Node> getHead(HashMap<String, Node> vertices, HashMap<Node, HashSet<Node>> edges){
         HashSet<Node> heads = new HashSet<Node>();
         for (Node vertex : vertices.values()) {
@@ -253,23 +185,101 @@ public class Assembler {
             if (notPointedTo){
                 heads.add(vertex);
             }
-
-//            if (edges.containsKey(vertex) && notPointedTo){
-//                heads.add(vertex);
-//            }
-
         }
         System.out.println(heads.size()+"heads");
-
-        for (Node node : heads) {
-            System.out.println(node.data);
-            System.out.println(node.reads.get(0));
-        }
-        System.out.println("\n");
 
         return heads;
     }
 
+    /*
+     Form a contig for each head
+     */
+    private String formContig(Node head, HashMap<String, Boolean> readsList) {
+        Node cur = head;
+        String contig = "";
+        String curRead = "";
+
+        // Attach first read
+        for (String read : cur.reads) {
+            // read is unvisited
+            if (readsList.get(read)){
+                if (read.indexOf(cur.data) == 0) {
+                    curRead = read;
+                    contig += read;
+                    cur = vertices.get(read.substring(read.length() - k + 1));
+                    readsList.replace(read, false);
+                }
+            }
+
+        }
+
+        boolean endOfContig = false;
+        boolean foundNext;
+
+        while (!endOfContig) {
+            foundNext = false;
+            for (String read : cur.reads) {
+                if (readsList.get(read) && !read.equals(curRead)){
+                    // cutoff  is the index of the first character that
+                    // comes immediately after the k-1 mer in read
+                    int cutoff = read.indexOf(cur.data) + k - 1;
+                    if (contig.contains(read.substring(0, cutoff))) {
+                        foundNext = true;
+                        curRead = read;
+                        contig += read.substring(cutoff);
+                        cur = vertices.get(read.substring(read.length() - k + 1));
+                        readsList.replace(read, false);
+                        //System.out.println("contig: " + contig);
+                        //System.out.println("read: "+read);
+                        //System.out.println("cur"+cur.data);
+                        break;
+                    }
+                }
+
+            }
+            if (!foundNext){
+                endOfContig = true;
+            }
+        }
+        return contig;
+    }
+
+
+    /*
+     Write out the contigs into a file
+    */
+    private ArrayList<String> writeContigs(HashSet<Node> heads, HashMap<String, Boolean> readsList) {
+        ArrayList<String> contigs = new ArrayList<String>();
+
+        for (Node head : heads) {
+            String contig = formContig (head, readsList);
+            contigs.add(contig);
+            System.out.println("final contig: " + contig);
+            try {
+                PrintWriter writer = new PrintWriter("contigs.txt", "UTF-8");
+                writer.print(contig);
+                writer.close();
+            }catch (IOException error) {
+                error.printStackTrace();
+            }
+        }
+        return contigs;
+    }
+
+
+
+    /*
+     assembly
+     */
+    private void assemble() {
+        HashMap<String, Boolean> readsList = readsParser();
+        HashMap<String, HashSet<String>> readsKmer = formKMers(readsList.keySet());
+        HashMap<String, ArrayList<String>> readskMinus1Mers = formKMinus1Mers(readsKmer);
+        deBruijn(readskMinus1Mers);
+        // printEdges(edges);
+        HashSet<Node> heads = getHead(vertices, edges);
+        ArrayList<String> contigs = writeContigs(heads, readsList);
+    }
 
 
     /*assume a and b have equal length*/
@@ -284,22 +294,6 @@ public class Assembler {
         return (double) numberOfSimilarities / a.length();
     }
 
-    /*
-     Help us visualize the edges of the de Bruijn edges
-     */
-    private void printEdges(HashMap<Node, HashSet<Node>> edges){
-        for(Node nodeL:edges.keySet()) {
-            for (Node node: edges.get(nodeL)){
-                System.out.print(nodeL.data+" -> ");
-                System.out.print(node.data+"\n");
-//                System.out.print(nodeL.reads.get(0) + "(Lread)");
-//                System.out.print(node.reads.get(0)+ "(Rread)");
-
-
-            }
-        }
-        System.out.print("\n");
-    }
 
     public static void main(String[] args) {
         if (args.length == 2){
