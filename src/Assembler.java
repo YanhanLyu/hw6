@@ -203,28 +203,29 @@ public class Assembler {
         for (String read : cur.reads) {
             // read is unvisited
             if (readsList.get(read)){
-                if (read.indexOf(cur.data) == 0) {
+                if (read.indexOf(cur.data)==0){
                     curRead = read;
                     contig += read;
                     cur = vertices.get(read.substring(read.length() - k + 1));
                     readsList.replace(read, false);
                 }
             }
-
         }
 
         boolean endOfContig = false;
-        boolean foundNext;
+        boolean foundExactOverlap;
+        boolean foundSimilarOverlap;
 
         while (!endOfContig) {
-            foundNext = false;
+            foundExactOverlap = false;
+            foundSimilarOverlap = false;
             for (String read : cur.reads) {
                 if (readsList.get(read) && !read.equals(curRead)){
                     // cutoff  is the index of the first character that
                     // comes immediately after the k-1 mer in read
                     int cutoff = read.indexOf(cur.data) + k - 1;
                     if (contig.contains(read.substring(0, cutoff))) {
-                        foundNext = true;
+                        foundExactOverlap = true;
                         curRead = read;
                         contig += read.substring(cutoff);
                         cur = vertices.get(read.substring(read.length() - k + 1));
@@ -235,29 +236,56 @@ public class Assembler {
                         break;
                     }
                 }
-
             }
-            if (!foundNext){
+            if (!foundExactOverlap){
+                for (Node next: vertices.values()){
+                    if (isSimilar(next.data, cur.data)){
+                        for (String read : next.reads){
+                            if (readsList.get(read)){
+                                int cutoff = read.indexOf(next.data) + k - 1;
+                                if (indexOfSimilar(contig,read.substring(0, cutoff)) > 0){
+                                    foundSimilarOverlap = true;
+                                    curRead = read;
+                                    contig += read.substring(cutoff);
+                                    cur = vertices.get(read.substring(read.length() - k + 1));
+                                    readsList.replace(read, false);
+                                    //System.out.println("contig: " + contig);
+                                    //System.out.println("read: "+read);
+                                    //System.out.println("cur"+cur.data);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (!foundExactOverlap && !foundSimilarOverlap){
                 endOfContig = true;
             }
+
         }
+
         return contig;
     }
-
 
     /*
      Write out the contigs into a file
     */
     private ArrayList<String> writeContigs(HashSet<Node> heads, HashMap<String, Boolean> readsList) {
         ArrayList<String> contigs = new ArrayList<String>();
-
+        String contigsString = "";
+        int i = 0;
         for (Node head : heads) {
             String contig = formContig (head, readsList);
-            contigs.add(contig);
-            System.out.println("final contig: " + contig);
+            if (!contig.equals("")){
+                contigs.add(contig);
+                contigsString += contig + "\n";
+                i++;
+                System.out.println("final contig" + i + ": " + contig);
+            }
             try {
                 PrintWriter writer = new PrintWriter("contigs.txt", "UTF-8");
-                writer.print(contig);
+                writer.print(contigsString);
                 writer.close();
             }catch (IOException error) {
                 error.printStackTrace();
@@ -265,7 +293,6 @@ public class Assembler {
         }
         return contigs;
     }
-
 
 
     /*
@@ -282,7 +309,11 @@ public class Assembler {
     }
 
 
-    /*assume a and b have equal length*/
+    /*
+     Helper method to determine the similarity of two strings
+     Assume a and b have equal length
+     Returns a double betwee 0 and 1
+     */
     private double similarity(String a, String b) {
         if(a.length() == 0) return 1;
         int numberOfSimilarities = 0;
@@ -292,6 +323,28 @@ public class Assembler {
             }
         }
         return (double) numberOfSimilarities / a.length();
+    }
+
+    private boolean isSimilar(String a, String b) {
+        return similarity(a,b)>0.85;
+    }
+
+    /*
+     Helper method to determine the index of the first substring of a that is similar to b
+     Return -1 if no such substring is found
+     */
+    private int indexOfSimilar(String a, String b) {
+        int na = a.length();
+        int nb = b.length();
+        if (na >= nb){
+            for(int i = 0; i < na-nb+1; i++) {
+                double similarity = similarity(a.substring(i,i+nb), b);
+                if (similarity > 0.85){
+                    return i;
+                }
+            }
+        }
+        return -1;
     }
 
 
